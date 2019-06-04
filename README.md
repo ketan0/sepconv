@@ -1,3 +1,5 @@
+NOTE: This is my fork of [this](https://github.com/martkartasev/sepconv) repo. It contains custom modifications to read in the r/Place data patches, run the previously-written code to perform data augmentation, and to train, validate, and test the model.
+
 # Implementing Adaptive Separable Convolution for Video Frame Interpolation
 
 This is a fully functional implementation of the work of Niklaus et al. \[[1](#references)\] on Adaptive Separable Convolution, which claims high quality results on the video frame interpolation task. We apply the same network structure trained on a smaller dataset and experiment with various different loss functions, in order to determine the optimal approach in data-scarce scenarios.
