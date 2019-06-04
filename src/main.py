@@ -17,6 +17,7 @@ from src.model import Net
 from src.dataset import get_training_set, get_validation_set, get_visual_test_set, pil_to_tensor
 from src.interpolate import interpolate
 from src.utilities import psnr
+import pickle
 
 # ----------------------------------------------------------------------
 
@@ -38,14 +39,14 @@ if config.SEED is not None:
 print('===> Loading datasets...')
 train_set = get_training_set()
 validation_set = get_validation_set()
-visual_test_set = get_visual_test_set()
+# visual_test_set = get_visual_test_set()
 training_data_loader = DataLoader(dataset=train_set, num_workers=config.NUM_WORKERS, batch_size=config.BATCH_SIZE,
                                   shuffle=True)
 validation_data_loader = DataLoader(dataset=validation_set, num_workers=config.NUM_WORKERS,
                                     batch_size=config.BATCH_SIZE, shuffle=False)
 
 if config.START_FROM_EXISTING_MODEL is not None:
-    print(f'===> Loading pre-trained model: {config.START_FROM_EXISTING_MODEL}')
+    print('===> Loading pre-trained model: {}'.format(config.START_FROM_EXISTING_MODEL))
     model = Net.from_file(config.START_FROM_EXISTING_MODEL)
 else:
     print('===> Building model...')
@@ -62,7 +63,7 @@ elif config.LOSS == "ssim":
 elif config.LOSS == "l1+vgg":
     loss_function = loss.CombinedLoss()
 else:
-    raise ValueError(f"Unknown loss: {config.LOSS}")
+    raise ValueError("Unknown loss: {}".format(config.LOSS))
 
 optimizer = optim.Adamax(model.parameters(), lr=0.001)
 
@@ -70,13 +71,17 @@ board_writer = SummaryWriter()
 
 # ----------------------------------------------------------------------
 
+train_loss = []
+val_loss = []
+
 def train(epoch):
     print("===> Training...")
     before_pass = [p.data.clone() for p in model.parameters()]
     epoch_loss = 0
     for iteration, batch in enumerate(training_data_loader, 1):
         input, target = batch[0].to(device), batch[1].to(device)
-
+        
+#         print(input.shape)
         optimizer.zero_grad()
 
         print('Forward pass...')
@@ -107,6 +112,10 @@ def train(epoch):
     board_writer.add_scalar('data/epoch_weight_change_l2', weight_diff_l2s, epoch)
     board_writer.add_scalar('data/epoch_gradient_l2', gradient_l2s, epoch)
     epoch_loss /= len(training_data_loader)
+    
+    #My Code:
+    train_loss.append(epoch_loss)
+    
     board_writer.add_scalar('data/epoch_training_loss', epoch_loss, epoch)
     print("===> Epoch {} Complete: Avg. Loss: {:.4f}".format(epoch, epoch_loss))
 
@@ -141,6 +150,7 @@ def validate(epoch):
     valid_loss /= iters
     valid_ssmi /= iters
     valid_psnr /= iters
+    val_loss.append((valid_loss, valid_ssmi, valid_psnr))
     board_writer.add_scalar('data/epoch_validation_loss', valid_loss, epoch)
     board_writer.add_scalar('data/epoch_ssmi', valid_ssmi, epoch)
     board_writer.add_scalar('data/epoch_psnr', valid_psnr, epoch)
@@ -169,6 +179,8 @@ for epoch in range(1, config.EPOCHS + 1):
     if config.VISUAL_TEST_ENABLED:
         visual_test(epoch)
 
+with open('/home/ketanagrawal/cs231n-fp/loss.p', 'wb') as fp:
+    pickle.dump((train_loss, val_loss), fp)
 tock_t = timer()
 
 print("Done. Took ~{}s".format(round(tock_t - tick_t)))

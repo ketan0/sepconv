@@ -14,6 +14,8 @@ from os.path import exists, join, basename, isdir
 from os import makedirs, remove, listdir, rmdir, rename
 from six.moves import urllib
 from PIL import Image
+import pickle
+from skimage.measure import compare_nrmse, compare_psnr, compare_ssim
 
 import src.config as config
 
@@ -26,8 +28,8 @@ def load_img(file_path):
     :param file_path: Path to the image file
     :return: PIL.Image object
     """
-    return Image.open(file_path).convert('RGB')
-
+    return Image.fromarray((np.load(file_path)*255).astype(np.uint8)).convert('RGB')
+#     return Image.open(file_path).convert('RGB')
 
 def is_image(file_path):
     """
@@ -72,7 +74,7 @@ def load_patch(patch):
     i, j = (patch['patch_i'], patch['patch_j'])
     imgs = [load_img(x) for x in paths]
     h, w = config.PATCH_SIZE
-    return tuple(crop_image(x, i, j, h, w) for x in imgs)
+    return tuple(imgs)
 
 
 def load_cached_patch(cached_patch):
@@ -82,7 +84,9 @@ def load_cached_patch(cached_patch):
     :param cached_patch: Patch as a tuple (path_to_left, path_to_middle, path_to_right)
     :return: Tuple of PIL.Image objects corresponding to the patch
     """
-    return tuple(load_img(x) for x in cached_patch)
+    return tuple((load_img(cached_patch["left_frame"]),
+                 load_img(cached_patch["middle_frame"]),
+                 load_img(cached_patch["right_frame"])))
 
 
 ############################################### DAVIS ###############################################
@@ -111,11 +115,11 @@ def _get_davis(dataset_dir, folder, url):
 
     if not exists(davis_dir):
 
-        if not exists(dataset_dir):
-            makedirs(dataset_dir)
+#         if not exists(dataset_dir):
+#             makedirs(dataset_dir)
 
-        if not exists(tmp_dir):
-            makedirs(tmp_dir)
+#         if not exists(tmp_dir):
+#             makedirs(tmp_dir)
 
         print("===> Downloading {}...".format(folder))
         response = urllib.request.urlopen(url)
@@ -252,46 +256,42 @@ def _extract_patches_worker(tuples, max_per_frame=1, trials_per_tuple=100, flow_
         left, middle, right = (load_img(x) for x in tup)
         img_w, img_h = left.size
 
-        left = pil_to_numpy(left)
-        middle = pil_to_numpy(middle)
-        right = pil_to_numpy(right)
+        left_patch = pil_to_numpy(left)
+        middle_patch = pil_to_numpy(middle)
+        right_patch = pil_to_numpy(right)
 
-        selected_patches = []
+#         selected_patches = []
+        
+#         if is_jumpcut(left_patch, middle_patch, jumpcut_threshold) or \
+#                 is_jumpcut(middle_patch, right_patch, jumpcut_threshold):
+#             jumpcuts += 1
+#             continue
 
-        for _ in range(trials_per_tuple):
+        avg_flow = simple_flow(left_patch, right_patch)
+#         print('flow: {}'.format(avg_flow))
+#         print('nrmse: {}'.format(compare_nrmse(left_patch, right_patch)))
+#         print()
+        if random.random() > avg_flow / flow_threshold:
+            flowfiltered += 1
+            continue
 
-            i = random.randint(0, img_h - patch_h)
-            j = random.randint(0, img_w - patch_w)
+        all_patches.append({
+            "left_frame": tup[0],
+            "middle_frame": tup[1],
+            "right_frame": tup[2],
+            "patch_i": 0,
+            "patch_j": 0,
+            "avg_flow": avg_flow
+        })
 
-            left_patch = left[i:i + patch_h, j:j + patch_w, :]
-            right_patch = right[i:i + patch_h, j:j + patch_w, :]
-            middle_patch = middle[i:i + patch_h, j:j + patch_w, :]
-
-            if is_jumpcut(left_patch, middle_patch, jumpcut_threshold) or \
-                    is_jumpcut(middle_patch, right_patch, jumpcut_threshold):
-                jumpcuts += 1
-                continue
-
-            avg_flow = simple_flow(left_patch, right_patch)
-            if random.random() > avg_flow / flow_threshold:
-                flowfiltered += 1
-                continue
-
-            selected_patches.append({
-                "left_frame": tup[0],
-                "middle_frame": tup[1],
-                "right_frame": tup[2],
-                "patch_i": i,
-                "patch_j": j,
-                "avg_flow": avg_flow
-            })
-
-        sorted(selected_patches, key=lambda x: x['avg_flow'], reverse=True)
-        all_patches += selected_patches[:max_per_frame]
-        # print("===> Tuple {}/{} ready.".format(tup_index+1, n_tuples))
+#         sorted(selected_patches, key=lambda x: x['avg_flow'], reverse=True)
+#         all_patches += selected_patches[:max_per_frame]
+        if (tup_index + 1) % 100 == 0:
+            print("# flowfiltered: {}".format(flowfiltered))
+            print("===> Tuple {}/{} ready.".format(tup_index+1, n_tuples))
 
     print('===> Processed {} tuples, {} patches extracted, {} discarded as jumpcuts, {} filtered by flow'.format(
-        n_tuples, len(all_patches), 100.0 * jumpcuts / total_iters, 100.0 * flowfiltered / total_iters
+        n_tuples, len(all_patches), jumpcuts, flowfiltered
     ))
 
     return all_patches
@@ -371,10 +371,10 @@ def _cache_patches(cache_dir, patches, workers=0):
     Call this with workers=0 to run on the current thread.
     """
 
-    if exists(cache_dir):
-        rmdir(cache_dir)
+#     if exists(cache_dir):
+#         rmdir(cache_dir)
 
-    makedirs(cache_dir)
+#     makedirs(cache_dir)
 
     tick_t = timer()
     print('===> Caching patches...')
@@ -420,16 +420,22 @@ def prepare_dataset(dataset_dir=None, force_rebuild=False):
 
         return patches
 
-    davis_dir = get_davis_17(dataset_dir)
-    tuples = tuples_from_davis(davis_dir, res='480p')
+#     davis_dir = get_davis_17(dataset_dir)
+#     tuples = tuples_from_davis(davis_dir, res='480p')
+    tuples = pickle.load(open('/home/ketanagrawal/cs231n-fp/train_tuples.p', 'rb'))
+#     tuples = tuples[-2:]
+    ##MY CODE##
+    print('total num tuples: {}'.format(len(tuples)))
+#     tuples = tuples[:min(len(tuples), 2)]
+    ##END MY CODE##
 
     patches = _extract_patches(
-        tuples,
+        tuples[::-1],
         max_per_frame=20,
-        trials_per_tuple=30,
-        flow_threshold=25.0,
+        trials_per_tuple=10,
+        flow_threshold=0.01,
         jumpcut_threshold=8e-3,
-        workers=2
+        workers=4
     )
 
     # shuffle patches before writing to file

@@ -10,6 +10,7 @@ import random
 from PIL import Image
 import src.data_manager as data_manager
 import src.config as config
+import pickle
 
 
 def pil_to_numpy(x_pil):
@@ -101,23 +102,50 @@ class ValidationDataset(data.Dataset):
 
     def __len__(self):
         return len(self.tuples)
+    
+
+class TestDataset(data.Dataset):
+
+    def __init__(self, tuples):
+        super(TestDataset, self).__init__()
+        self.tuples = tuples
+        self.crop = CenterCrop(config.CROP_SIZE)
+
+    def __getitem__(self, index):
+        frames = self.tuples[index]
+        x1, target, x2 = (pil_to_tensor(self.crop(data_manager.load_img(x))) for x in frames)
+        input = torch.cat((x1, x2), dim=0)
+        return input, target
+
+    def __len__(self):
+        return len(self.tuples)
 
 
 def get_training_set():
-    patches = data_manager.prepare_dataset()
-    if config.CACHE_PATCHES:
-        patches = data_manager.get_cached_patches()
+    patches = data_manager.prepare_dataset(force_rebuild=True)
+#     if config.CACHE_PATCHES:
+#         patches = data_manager.get_cached_patches()
     patches = patches[:config.MAX_TRAINING_SAMPLES]
     return PatchDataset(patches, config.CACHE_PATCHES, config.AUGMENT_DATA)
 
 
 def get_validation_set():
-    davis_17_test = data_manager.get_davis_17_test(config.DATASET_DIR)
-    tuples = data_manager.tuples_from_davis(davis_17_test, res='480p')
-    n_samples = min(len(tuples), config.MAX_VALIDATION_SAMPLES)
-    random_ = random.Random(42)
-    tuples = random_.sample(tuples, n_samples)
+#     davis_17_test = data_manager.get_davis_17_test(config.DATASET_DIR)
+#     tuples = data_manager.tuples_from_davis(davis_17_test, res='480p')
+#     n_samples = min(len(tuples), config.MAX_VALIDATION_SAMPLES)
+#     random_ = random.Random(42)
+#     tuples = random_.sample(tuples, n_samples)
+    tuples = pickle.load(open('/home/ketanagrawal/cs231n-fp/val_tuples.p', 'rb'))
     return ValidationDataset(tuples)
+
+def get_test_set():
+#     davis_17_test = data_manager.get_davis_17_test(config.DATASET_DIR)
+#     tuples = data_manager.tuples_from_davis(davis_17_test, res='480p')
+#     n_samples = min(len(tuples), config.MAX_VALIDATION_SAMPLES)
+#     random_ = random.Random(42)
+#     tuples = random_.sample(tuples, n_samples)
+    tuples = pickle.load(open('/home/ketanagrawal/cs231n-fp/test_tuples.p', 'rb'))
+    return TestDataset(tuples)
 
 
 def get_visual_test_set():

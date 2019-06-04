@@ -64,7 +64,7 @@ class Net(nn.Module):
         """
         model = Net(init_weights=False)
         state_dict = torch.load(file_path)
-        model.load_state_dict(state_dict)
+        model.load_state_dict(state_dict, strict=False)
         return model
 
     def to_file(self, file_path: str):
@@ -98,9 +98,11 @@ class Net(nn.Module):
 
         x128 = self.conv128(x128)
         x256 = self.pool(x128)
+        # print('x256: ', x256.shape)
 
         x256 = self.conv256(x256)
         x512 = self.pool(x256)
+        # print('x512: ', x512.shape)
 
         x512 = self.conv512(x512)
         x = self.pool(x512)
@@ -110,10 +112,12 @@ class Net(nn.Module):
         # ------------ Expansion ------------
 
         x = self.upsamp512(x)
+        # print('x: ', x512.shape)
         x += x512
         x = self.upconv256(x)
 
         x = self.upsamp256(x)
+        # print('x: ', x.shape)
         x += x256
         x = self.upconv128(x)
 
