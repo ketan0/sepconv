@@ -122,7 +122,7 @@ class TestDataset(data.Dataset):
 
 
 def get_training_set():
-    patches = data_manager.prepare_dataset(force_rebuild=True)
+    patches = data_manager.prepare_dataset()
 #     if config.CACHE_PATCHES:
 #         patches = data_manager.get_cached_patches()
     patches = patches[:config.MAX_TRAINING_SAMPLES]

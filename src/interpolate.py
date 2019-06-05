@@ -73,8 +73,8 @@ def interpolate_batch(model_, pil_frames):
     # Get numpy representation of the output
     output = output.cpu().detach().numpy()
 
-    output_pils = [numpy_to_pil(x) for x in output]
-    return output_pils
+    output = [numpy_to_pil(x) for x in output]
+    return output
 
 
 def interpolate(model_, frame1, frame2):

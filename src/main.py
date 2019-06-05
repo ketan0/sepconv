@@ -62,10 +62,12 @@ elif config.LOSS == "ssim":
     loss_function = loss.SsimLoss()
 elif config.LOSS == "l1+vgg":
     loss_function = loss.CombinedLoss()
+elif config.LOSS == "l1+color":
+    loss_function = loss.CombinedLoss2()
 else:
     raise ValueError("Unknown loss: {}".format(config.LOSS))
 
-optimizer = optim.Adamax(model.parameters(), lr=0.001)
+optimizer = optim.Adamax(model.parameters(), lr=0.0001)
 
 board_writer = SummaryWriter()
 
@@ -73,6 +75,7 @@ board_writer = SummaryWriter()
 
 train_loss = []
 val_loss = []
+total_loss = []
 
 def train(epoch):
     print("===> Training...")
@@ -155,6 +158,27 @@ def validate(epoch):
     board_writer.add_scalar('data/epoch_ssmi', valid_ssmi, epoch)
     board_writer.add_scalar('data/epoch_psnr', valid_psnr, epoch)
     print("===> Validation loss: {:.4f}".format(valid_loss))
+    
+# def test():
+#     print("===> Running testing...")
+#     ssmi = loss.SsimLoss()
+#     test_loss, test_ssmi, test_psnr = 0, 0, 0
+#     iters = len(validation_data_loader)
+#     with torch.no_grad():
+#         for batch in validation_data_loader:
+#             input, target = batch[0].to(device), batch[1].to(device)
+#             output = model(input)
+#             test_loss += loss_function(output, target).item()
+#             test_ssmi -= ssmi(output, target).item()
+#             test_psnr += psnr(output, target).item()
+#     test_loss /= iters
+#     test_ssmi /= iters
+#     test_psnr /= iters
+#     total_loss.append((test_loss, test_ssmi, test_psnr))
+#     board_writer.add_scalar('data/epoch_validation_loss', test_loss, epoch)
+#     board_writer.add_scalar('data/epoch_ssmi', test_ssmi, epoch)
+#     board_writer.add_scalar('data/epoch_psnr', test_psnr, epoch)
+#     print("===> Test loss: {:.4f}".format(test_loss))
 
 
 def visual_test(epoch):
@@ -179,8 +203,12 @@ for epoch in range(1, config.EPOCHS + 1):
     if config.VISUAL_TEST_ENABLED:
         visual_test(epoch)
 
-with open('/home/ketanagrawal/cs231n-fp/loss.p', 'wb') as fp:
+
+with open('/home/ketanagrawal/cs231n-fp/loss_lf_new.p', 'wb') as fp:
     pickle.dump((train_loss, val_loss), fp)
+    
+# with open('/home/ketanagrawal/cs231n-fp/loss_lf_new.p', 'wb') as fp:
+#     pickle.dump((train_loss, val_loss), fp)
 tock_t = timer()
 
 print("Done. Took ~{}s".format(round(tock_t - tick_t)))

@@ -34,6 +34,28 @@ class VggLoss(nn.Module):
         loss = torch.norm(outputFeatures - targetFeatures, 2)
 
         return config.VGG_FACTOR * loss
+    
+class ColorPixelLoss(nn.Module):
+    def __init__(self):
+        super(ColorPixelLoss, self).__init__()
+        self.rgb_colormap = (torch.Tensor([HTMLColorToPercentRGB(html_cs) for html_cs in [
+            '#FFFFFF', '#E4E4E4', '#888888', '#222222', '#FFA7D1', '#E50000', '#E59500', '#A06A42',
+            '#E5D900', '#94E044', '#02BE01', '#00E5F0', '#0083C7', '#0000EA', '#E04AFF', '#820080'
+        ]])).cuda()
+        print(self.rgb_colormap.shape)
+        
+    def forward(self, output, target):
+        print(output.shape)
+        print(torch.max(output))
+        
+        dist = output.view(output.shape[0], 3, -1, 1) - self.rgb_colormap.view(1, 3, 1, -1)
+        print('dist: ', dist.shape)
+        norm_dist = torch.norm(dist, dim=1)
+        print('norm_dist: ', norm_dist.shape)
+        min_dist = torch.min(norm_dist, 2)[0]
+        print('min_dist: ', min_dist.shape)
+        loss = torch.sum(min_dist)
+        return config.COLOR_FACTOR * loss
 
 
 class CombinedLoss(nn.Module):
@@ -45,6 +67,17 @@ class CombinedLoss(nn.Module):
     def forward(self, output, target) -> torch.Tensor:
         return self.vgg(output, target) + self.l1(output, target)
 
+    
+class CombinedLoss2(nn.Module):
+    def __init__(self):
+        super(CombinedLoss2, self).__init__()
+        self.l1 = nn.L1Loss()
+        self.color = ColorPixelLoss()
+
+    def forward(self, output, target) -> torch.Tensor:
+        a, b = self.l1(output, target), self.color(output, target)
+        print('l1: {} color: {}'.format(a, b))
+        return a + b
 
 class SsimLoss(torch.nn.Module):
     def __init__(self, window_size=11, size_average=True):
@@ -121,3 +154,21 @@ def _ssim(img1, img2, window, window_size, channel, size_average=True):
         return ssim_map.mean()
     else:
         return ssim_map.mean(1).mean(1).mean(1)
+
+def HTMLColorToRGB(cs):
+    """
+    Converts #RRGGBB to an (R, G, B) tuple.
+    """
+    cs = cs.strip()
+    if cs[0] == '#': cs = cs[1:]
+    if len(cs) != 6:
+        raise ValueError("input #%s is not in #RRGGBB format" % cs)
+    r, g, b = cs[:2], cs[2:4], cs[4:]
+    r, g, b = [int(n, 16) for n in (r, g, b)]
+    return (r, g, b)
+
+def HTMLColorToPercentRGB(cs):
+    """
+    Converts #RRGGBB to a (Red, Green, Blue) ratio-out-of-1 tuple, as used by matplotlib.
+    """
+    return [c / 256 for c in HTMLColorToRGB(cs)]
